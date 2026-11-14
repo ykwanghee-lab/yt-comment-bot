@@ -122,6 +122,49 @@ def notify_review(cfg, all_reviews) -> None:
     save_notified(notified)
 
 
+AUTH_ALERT_PATH = os.path.join(BASE_DIR, "인증알림.json")
+
+
+def notify_auth(cfg, auth_failed) -> None:
+    """로그인(토큰)이 끊긴 채널을 텔레그램으로 알림. 같은 채널은 하루에 한 번만.
+    다시 정상이 되면 기록에서 지우고 '복구됨' 알림."""
+    try:
+        state = json.load(open(AUTH_ALERT_PATH, encoding="utf-8"))
+    except Exception:
+        state = {}
+    now = datetime.datetime.now()
+    changed = False
+    due = []
+    for name in auth_failed:
+        last = state.get(name)
+        try:
+            recent = last and (now - datetime.datetime.fromisoformat(last)).total_seconds() < 86400
+        except Exception:
+            recent = False
+        if not recent:
+            due.append(name)
+            state[name] = now.isoformat(timespec="seconds")
+            changed = True
+    recovered = [n for n in list(state) if n not in auth_failed]
+    for n in recovered:
+        del state[n]
+        changed = True
+    if due:
+        telegram_send(cfg, "⚠️ 유튜브 댓글봇 로그인이 끊긴 채널이 있습니다\n\n"
+                           + "\n".join(f"• {n}" for n in due)
+                           + "\n\n이 채널은 지금 답글이 안 달립니다.\n"
+                             "PC에서 '채널추가.bat'(영어 채널은 add_channel_en.bat, 일본어는 add_channel_ja.bat)을 "
+                             "실행해 해당 채널로 로그인하면 클라우드에도 자동 반영됩니다.")
+    if recovered:
+        telegram_send(cfg, "✅ 댓글봇 로그인 복구됨: " + ", ".join(recovered))
+    if changed:
+        try:
+            json.dump(state, open(AUTH_ALERT_PATH, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+
 def push_dashboard(cfg) -> None:
     """최신 대시보드를 GitHub Pages로 즉시 푸시 (알림 링크가 항상 최신이 되도록). 실패해도 무시."""
     if not cfg.get("push_pages_after_run", False):
@@ -619,6 +662,7 @@ def main():
     summaries = []
     all_reviews = []
     channel_summaries = []
+    auth_failed = []
     for ch in channels:
         name = ch.get("name", "채널")
         print(f"\n── [{name}] 처리 중 ──")
@@ -627,6 +671,8 @@ def main():
         except HttpError as e:
             print(f"[{name}] API 오류 → 건너뜀: {e}")
             posted, planned, r, s, status, ch_auto, reviews = 0, 0, 0, 0, "API오류", False, []
+        if status == "인증필요":
+            auth_failed.append(name)
         for it in reviews:
             it["channel"] = name
             all_reviews.append(it)
@@ -670,6 +716,12 @@ def main():
         notify_review(cfg, all_reviews)
     except Exception as e:
         print(f"[알림 처리 오류] {e}")
+
+    # 로그인 끊긴 채널 → 텔레그램 알림(하루 1번) / 복구되면 복구 알림
+    try:
+        notify_auth(cfg, auth_failed)
+    except Exception as e:
+        print(f"[인증 알림 오류] {e}")
 
 
 if __name__ == "__main__":
