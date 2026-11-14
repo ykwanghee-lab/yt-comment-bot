@@ -1,0 +1,7 @@
+# 비밀값 — 절대 올리지 않음
+token*.json
+secret_config.json
+client_secret*.json
+*.bak*
+__pycache__/
+dash/채널대시보드.html

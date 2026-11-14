@@ -1,0 +1,51 @@
+{
+  "channels": [
+    {
+      "name": "사연이짱",
+      "id": "UCfpwvmxLT5qSx5OAR3LiLWQ",
+      "token": "token_사연이짱.json"
+    },
+    {
+      "name": "정치동네",
+      "id": "UCdnBX14csQpB6KN2MJh1hew",
+      "token": "token_정치동네.json",
+      "auto_post": false
+    },
+    {
+      "name": "역사재미짱",
+      "id": "UC5fF8x-PcmzIKTm-_Ao23Cw",
+      "token": "token_역사재미짱.json",
+      "auto_post": true
+    },
+    {
+      "name": "무비세상",
+      "id": "UCbCyyXELP8vw0yf173Cx-zw",
+      "token": "token_무비세상.json"
+    },
+    {
+      "name": "씬(Cine)21",
+      "id": "UC3h2wq0MYJrzldMWpasrgog",
+      "token": "token_씬(Cine)21.json"
+    },
+    {
+      "name": "petzzangs",
+      "id": "UCR0V6uu1hZ3nFLF5-nPFtpg",
+      "token": "token_petzzangs.json",
+      "lang": "en",
+      "auto_post": true
+    },
+    {
+      "name": "The_Great_Silence",
+      "id": "UCsOkxuhKMy27XtcMS548kLw",
+      "token": "token_The_Great_Silence.json",
+      "lang": "en",
+      "auto_post": true
+    },
+    {
+      "name": "人生の便り",
+      "id": "UCv3QJsd_Nxi7gVfwTaIRwcg",
+      "token": "token_人生の便り.json",
+      "lang": "ja"
+    }
+  ]
+}

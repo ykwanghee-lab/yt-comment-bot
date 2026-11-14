@@ -1,0 +1,82 @@
+name: comment-bot
+
+# 30분마다 댓글봇, 1시간마다(정각+7분 회차) 채널 대시보드. 시각은 UTC 기준 분(分)만 쓰므로 한국 시간과 같다.
+on:
+  schedule:
+    - cron: '7 * * * *'
+    - cron: '37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: comment-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Seoul
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: bot/requirements.txt
+
+      - name: 라이브러리 설치
+        run: pip install -r bot/requirements.txt
+
+      - name: 비밀값 풀기
+        id: sec
+        env:
+          BOT_SECRETS: ${{ secrets.BOT_SECRETS }}
+        run: python bot/cloud_secrets.py
+
+      - name: 댓글봇 실행
+        if: steps.sec.outputs.ready == 'true'
+        env:
+          DASHBOARD_INDEX: ${{ github.workspace }}/index.html
+        run: python bot/youtube_reply_helper.py
+
+      - name: 채널 대시보드 (1시간마다)
+        if: steps.sec.outputs.ready == 'true' && github.event.schedule != '37 * * * *'
+        continue-on-error: true
+        env:
+          YT_BOT_DIR: ${{ github.workspace }}/bot
+          YT_DASH_HIST: ${{ github.workspace }}/dash/채널통계_기록.json
+          YT_DASH_PAGES_OUT: ${{ github.workspace }}/channels.html
+        run: python dash/channel_dashboard.py
+
+      - name: 실행기록 정리 (최근 3000줄만)
+        if: steps.sec.outputs.ready == 'true'
+        run: |
+          python - <<'EOF'
+          p = "bot/run_log.txt"
+          try:
+              lines = open(p, encoding="utf-8").read().splitlines()
+          except FileNotFoundError:
+              lines = []
+          open(p, "w", encoding="utf-8").write("\n".join(lines[-3000:]) + ("\n" if lines else ""))
+          EOF
+
+      - name: 결과 저장(커밋)
+        if: steps.sec.outputs.ready == 'true'
+        run: |
+          rm -f bot/token_*.json bot/secret_config.json
+          git config user.name "comment-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+          git commit -q -m "bot $(date '+%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull -q --rebase && git push -q && exit 0
+            sleep 5
+          done
+          echo "푸시 실패"; exit 1
