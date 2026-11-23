@@ -343,11 +343,14 @@ def _cfg_lang(cfg, key, lang):
     return cfg[key]
 
 
-def classify(text, cfg, lang="ko"):
+def classify(text, cfg, lang="ko", ch=None):
     t = text.strip()
     low = t.lower()
 
-    cls = _cfg_lang(cfg, "classification", lang)
+    cls = dict(_cfg_lang(cfg, "classification", lang))
+    # 채널별 덮어쓰기: channels.json 항목에 "classification": {"auto_max_length": 300, ...} 가 있으면 그 값 우선
+    if ch and isinstance(ch.get("classification"), dict):
+        cls.update(ch["classification"])
     review_kw = cls["review_keywords"]
     question_marks = cls["question_marks"]
     auto_kw = cls["auto_reply_keywords"]
@@ -393,8 +396,11 @@ def strip_specials(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def make_auto_reply(author_name, cfg, lang="ko"):
+def make_auto_reply(author_name, cfg, lang="ko", ch=None):
     templates = _cfg_lang(cfg, "auto_reply_templates", lang)
+    # 채널별 템플릿: channels.json 항목에 "auto_reply_templates": [...] 가 있으면(채널 기본 언어일 때) 그것 사용
+    if ch and ch.get("auto_reply_templates") and lang == (ch.get("lang") or "ko").lower():
+        templates = ch["auto_reply_templates"]
     reply = random.choice(templates).replace("{name}", author_name)
     return strip_specials(reply)   # 이모지 등 특수문자 제외
 
@@ -564,9 +570,10 @@ def write_dashboard(cfg, all_reviews, channel_summaries):
 # ─────────────────────────────────────────────
 # 채널 1개 처리
 # ─────────────────────────────────────────────
-def process_channel(ch, cfg):
+def process_channel(ch, cfg, own_ids=None):
     """반환: (자동답글수, 검토수, 건너뜀수, 상태문자열)"""
     name = ch.get("name", "채널")
+    own_ids = set(own_ids or [])   # channels.json 에 등록된 내 채널 ID 전부 — 내가 내 채널끼리 단 댓글은 처리 안 함
     youtube = get_service(ch.get("token", ""))
     if youtube is None:
         print(f"[{name}] 인증 없음/만료 → 건너뜀 (채널추가.bat 로 인증 필요)")
@@ -603,8 +610,8 @@ def process_channel(ch, cfg):
         link = f"https://www.youtube.com/watch?v={video_id}&lc={comment_id}" if video_id else \
                f"https://www.youtube.com/comment?lc={comment_id}"
 
-        if author_id == channel_id:
-            continue
+        if author_id == channel_id or (author_id and author_id in own_ids):
+            continue   # 내 채널(또는 내 다른 채널)이 단 댓글
         if comment_id in done_ids:
             skipped += 1
             continue
@@ -614,11 +621,11 @@ def process_channel(ch, cfg):
             continue
 
         lang = comment_lang(text, channel_lang) if match_lang else channel_lang
-        kind, reason = classify(text, cfg, lang)
+        kind, reason = classify(text, cfg, lang, ch)
 
         if kind == "auto":
             auto_planned += 1
-            reply = make_auto_reply(author, cfg, lang)
+            reply = make_auto_reply(author, cfg, lang, ch)
             if auto_post:
                 try:
                     post_reply(youtube, comment_id, reply)
@@ -648,6 +655,7 @@ def process_channel(ch, cfg):
 def main():
     cfg = load_config()
     channels = load_channels()
+    own_ids = {c.get("id") for c in channels if c.get("id")}   # 내 채널 ID 집합(채널 간 댓글 제외용)
 
     print("=" * 52)
     print("유튜브 댓글 도우미 (멀티 채널) 실행")
@@ -667,7 +675,7 @@ def main():
         name = ch.get("name", "채널")
         print(f"\n── [{name}] 처리 중 ──")
         try:
-            posted, planned, r, s, status, ch_auto, reviews = process_channel(ch, cfg)
+            posted, planned, r, s, status, ch_auto, reviews = process_channel(ch, cfg, own_ids)
         except HttpError as e:
             print(f"[{name}] API 오류 → 건너뜀: {e}")
             posted, planned, r, s, status, ch_auto, reviews = 0, 0, 0, 0, "API오류", False, []
