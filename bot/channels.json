@@ -9,7 +9,7 @@
       "name": "정치동네",
       "id": "UCdnBX14csQpB6KN2MJh1hew",
       "token": "token_정치동네.json",
-      "auto_post": false
+      "auto_post": true
     },
     {
       "name": "역사재미짱",
